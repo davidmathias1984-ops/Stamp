@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stamp — Certified Document Watermarker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0f0e0c;
+    --paper: #f5f0e8;
+    --amber: #c8873a;
+    --amber-light: #e8a85a;
+    --rust: #9b3a1e;
+    --sage: #4a6741;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.4;
+  }
+
+  header {
+    width: 100%;
+    max-width: 960px;
+    padding: 3rem 2rem 1.5rem;
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    border-bottom: 1px solid rgba(200,135,58,0.3);
+  }
+
+  .logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.8rem;
+    font-weight: 900;
+    color: var(--amber);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .tagline {
+    font-size: 0.7rem;
+    color: rgba(245,240,232,0.4);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding-bottom: 0.2rem;
+  }
+
+  main {
+    width: 100%;
+    max-width: 960px;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .step {
+    background: rgba(245,240,232,0.04);
+    border: 1px solid rgba(200,135,58,0.2);
+    border-radius: 4px;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .step.active { border-color: rgba(200,135,58,0.6); }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    background: rgba(200,135,58,0.07);
+    border-bottom: 1px solid rgba(200,135,58,0.15);
+  }
+
+  .step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 1.5px solid var(--amber);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem;
+    color: var(--amber);
+    flex-shrink: 0;
+  }
+
+  .step-title {
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(245,240,232,0.7);
+  }
+
+  .step-body { padding: 1.5rem; }
+
+  /* ── Capture ── */
+  #capture-area { display: flex; flex-direction: column; gap: 1rem; }
+
+  .source-tabs { display: flex; gap: 0.5rem; }
+
+  .tab-btn {
+    background: transparent;
+    border: 1px solid rgba(200,135,58,0.3);
+    color: rgba(245,240,232,0.5);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.2s;
+  }
+  .tab-btn.active, .tab-btn:hover {
+    background: rgba(200,135,58,0.15);
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+
+  #video-container {
+    position: relative;
+    background: #000;
+    border-radius: 2px;
+    overflow: hidden;
+    aspect-ratio: 4/3;
+    max-height: 420px;
+  }
+  #video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  #video-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    color: rgba(245,240,232,0.25);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+  }
+  .camera-icon { width: 48px; height: 48px; opacity: 0.2; }
+
+  .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+  .btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: var(--amber); color: var(--ink); font-weight: 500; }
+  .btn-primary:hover { background: var(--amber-light); }
+  .btn-primary:disabled { background: rgba(200,135,58,0.3); color: rgba(245,240,232,0.3); cursor: not-allowed; }
+  .btn-secondary { background: transparent; border: 1px solid rgba(200,135,58,0.4); color: rgba(245,240,232,0.6); }
+  .btn-secondary:hover { border-color: var(--amber); color: var(--amber); background: rgba(200,135,58,0.08); }
+  .btn-success { background: var(--sage); color: #fff; }
+  .btn-success:hover { background: #5a7d50; }
+
+  #upload-input { display: none; }
+
+  /* ── Category cards ── */
+  .section-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(245,240,232,0.38);
+    margin-bottom: 0.85rem;
+  }
+
+  .doc-category-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .doc-cat-card {
+    border: 1.5px solid rgba(200,135,58,0.22);
+    border-radius: 4px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: rgba(245,240,232,0.03);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .doc-cat-card:hover { border-color: var(--amber); background: rgba(200,135,58,0.08); }
+  .doc-cat-card.selected { border-color: var(--amber); background: rgba(200,135,58,0.15); }
+
+  .doc-cat-icon { font-size: 1.4rem; line-height: 1; }
+  .doc-cat-name {
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--amber);
+    font-weight: 500;
+  }
+  .doc-cat-desc { font-size: 0.62rem; color: rgba(245,240,232,0.32); line-height: 1.5; }
+
+  /* ── Cert fields ── */
+  .cert-section {
+    border-top: 1px solid rgba(200,135,58,0.15);
+    padding-top: 1.25rem;
+  }
+
+  .cert-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .cert-field { display: flex; flex-direction: column; gap: 0.35rem; }
+  .cert-field.full { grid-column: 1 / -1; }
+
+  .cert-field label {
+    font-size: 0.63rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(245,240,232,0.38);
+  }
+
+  .cert-field input,
+  .cert-field textarea {
+    background: rgba(245,240,232,0.06);
+    border: 1px solid rgba(200,135,58,0.25);
+    border-radius: 2px;
+    color: var(--paper);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    padding: 0.55rem 0.75rem;
+    transition: border-color 0.2s;
+    resize: vertical;
+  }
+  .cert-field input:focus, .cert-field textarea:focus {
+    outline: none;
+    border-color: var(--amber);
+  }
+  .cert-field textarea { min-height: 64px; line-height: 1.5; }
+
+  .cert-preview {
+    margin-top: 1rem;
+    padding: 1rem 1.25rem;
+    background: rgba(200,135,58,0.06);
+    border: 1px solid rgba(200,135,58,0.18);
+    border-radius: 3px;
+    font-size: 0.72rem;
+    line-height: 1.75;
+    color: rgba(245,240,232,0.6);
+    font-style: italic;
+  }
+  .cert-preview strong { color: var(--amber); font-style: normal; }
+
+  /* ── Options ── */
+  .options-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    gap: 1rem;
+  }
+
+  .option-group label {
+    display: block;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(245,240,232,0.4);
+    margin-bottom: 0.4rem;
+  }
+
+  .option-group select,
+  .option-group input[type="color"],
+  .option-group input[type="range"] {
+    width: 100%;
+    background: rgba(245,240,232,0.06);
+    border: 1px solid rgba(200,135,58,0.25);
+    border-radius: 2px;
+    color: var(--paper);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    padding: 0.5rem 0.75rem;
+  }
+  .option-group select { cursor: pointer; }
+  .option-group select option { background: #1a1915; }
+  .option-group input[type="color"] { padding: 0.25rem; height: 38px; cursor: pointer; }
+
+  .toggle-row { display: flex; flex-direction: column; gap: 0.6rem; }
+  .toggle-item { display: flex; align-items: center; gap: 0.75rem; cursor: pointer; }
+  .toggle-item input[type="checkbox"] {
+    appearance: none;
+    width: 16px; height: 16px;
+    border: 1.5px solid rgba(200,135,58,0.5);
+    border-radius: 2px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .toggle-item input[type="checkbox"]:checked { background: var(--amber); border-color: var(--amber); }
+  .toggle-item input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+    color: var(--ink);
+  }
+  .toggle-label { font-size: 0.75rem; color: rgba(245,240,232,0.65); }
+
+  #location-status { font-size: 0.68rem; color: rgba(245,240,232,0.35); letter-spacing: 0.05em; margin-top: 0.75rem; }
+
+  /* ── Result ── */
+  #result-container { display: none; flex-direction: column; align-items: center; gap: 1.5rem; }
+  #canvas-out { max-width: 100%; border-radius: 2px; box-shadow: 0 8px 40px rgba(0,0,0,0.5); }
+
+  #status {
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--amber);
+    min-height: 1.2em;
+    text-align: center;
+    padding: 0 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .status-ok  { color: var(--sage) !important; }
+  .status-err { color: var(--rust) !important; }
+
+  #canvas-work { display: none; }
+
+  footer {
+    padding: 2rem;
+    font-size: 0.62rem;
+    color: rgba(245,240,232,0.18);
+    letter-spacing: 0.1em;
+    text-align: center;
+  }
+
+  @media (max-width: 580px) {
+    .cert-fields { grid-template-columns: 1fr; }
+    .doc-category-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Stamp</div>
+  <div class="tagline">Certified document photo watermarker</div>
+</header>
+
+<main>
+
+  <!-- ── Step 1: Capture ── -->
+  <div class="step active" id="step-capture">
+    <div class="step-header">
+      <div class="step-num">1</div>
+      <div class="step-title">Capture or upload a photo of the document</div>
+    </div>
+    <div class="step-body" id="capture-area">
+
+      <div class="source-tabs">
+        <button class="tab-btn active" id="tab-camera" onclick="switchTab('camera')">Camera</button>
+        <button class="tab-btn" id="tab-upload" onclick="switchTab('upload')">Upload</button>
+      </div>
+
+      <div id="video-container">
+        <video id="video" autoplay playsinline muted></video>
+        <div id="video-placeholder">
+          <svg class="camera-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          <span>Camera not started</span>
+        </div>
+      </div>
+
+      <div class="btn-row" id="camera-btns">
+        <button class="btn btn-primary" id="btn-start-cam" onclick="startCamera()">Start camera</button>
+        <button class="btn btn-secondary" id="btn-snap" onclick="snapPhoto()" disabled>Take photo</button>
+        <button class="btn btn-secondary" id="btn-stop-cam" onclick="stopCamera()" style="display:none">Stop camera</button>
+      </div>
+
+      <div class="btn-row" id="upload-btns" style="display:none">
+        <button class="btn btn-primary" onclick="document.getElementById('upload-input').click()">Choose file</button>
+        <input type="file" id="upload-input" accept="image/*" onchange="handleUpload(event)">
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Step 2: Classify & Certify ── -->
+  <div class="step" id="step-classify">
+    <div class="step-header">
+      <div class="step-num">2</div>
+      <div class="step-title">Classify &amp; certify the document</div>
+    </div>
+    <div class="step-body">
+
+      <div class="section-label">Document category</div>
+
+      <div class="doc-category-grid">
+        <div class="doc-cat-card" id="cat-address" onclick="selectCategory('address')">
+          <div class="doc-cat-icon">🏠</div>
+          <div class="doc-cat-name">Proof of Address</div>
+          <div class="doc-cat-desc">Utility bill, bank statement, council tax letter</div>
+        </div>
+        <div class="doc-cat-card" id="cat-identity" onclick="selectCategory('identity')">
+          <div class="doc-cat-icon">🪪</div>
+          <div class="doc-cat-name">Proof of Identity</div>
+          <div class="doc-cat-desc">Passport, driving licence, national ID card</div>
+        </div>
+        <div class="doc-cat-card" id="cat-income" onclick="selectCategory('income')">
+          <div class="doc-cat-icon">💷</div>
+          <div class="doc-cat-name">Proof of Income</div>
+          <div class="doc-cat-desc">Payslip, P60, tax return, bank statement</div>
+        </div>
+        <div class="doc-cat-card" id="cat-other" onclick="selectCategory('other')">
+          <div class="doc-cat-icon">📄</div>
+          <div class="doc-cat-name">Other</div>
+          <div class="doc-cat-desc">Any other supporting document</div>
+        </div>
+      </div>
+
+      <div id="other-label-row" style="display:none; margin-bottom:1.25rem">
+        <div class="cert-field">
+          <label>Describe the document type</label>
+          <input type="text" id="other-label" placeholder="e.g. Tenancy agreement" oninput="updatePreview()">
+        </div>
+      </div>
+
+      <div class="cert-section">
+        <div class="section-label" style="margin-bottom:1rem">Certification details</div>
+
+        <div class="cert-fields">
+          <div class="cert-field">
+            <label>Your full name</label>
+            <input type="text" id="cert-name" placeholder="e.g. Jane Smith" oninput="updatePreview()">
+          </div>
+          <div class="cert-field">
+            <label>Your role / job title</label>
+            <input type="text" id="cert-role" placeholder="e.g. Mortgage Adviser" oninput="updatePreview()">
+          </div>
+          <div class="cert-field">
+            <label>Your company (optional)</label>
+            <input type="text" id="cert-company" placeholder="e.g. Acme Financial Ltd" oninput="updatePreview()">
+          </div>
+          <div class="cert-field">
+            <label>Customer / client name</label>
+            <input type="text" id="cert-customer" placeholder="e.g. John Doe" oninput="updatePreview()">
+          </div>
+          <div class="cert-field full">
+            <label>Additional notes (optional)</label>
+            <textarea id="cert-notes" placeholder="e.g. Inspected in person at branch office. Document appeared genuine and unaltered." oninput="updatePreview()"></textarea>
+          </div>
+        </div>
+
+        <div class="cert-preview" id="cert-preview">
+          <em>Fill in the fields above to see a preview of the certification text that will appear on the image.</em>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Step 3: Appearance ── -->
+  <div class="step" id="step-options">
+    <div class="step-header">
+      <div class="step-num">3</div>
+      <div class="step-title">Stamp appearance</div>
+    </div>
+    <div class="step-body">
+      <div class="options-grid">
+
+        <div class="option-group">
+          <label>Metadata corner</label>
+          <select id="opt-position">
+            <option value="bottom-right">Bottom right</option>
+            <option value="bottom-left">Bottom left</option>
+            <option value="top-right">Top right</option>
+            <option value="top-left">Top left</option>
+          </select>
+        </div>
+
+        <div class="option-group">
+          <label>Cert band position</label>
+          <select id="opt-cert-position">
+            <option value="bottom">Bottom of image</option>
+            <option value="top">Top of image</option>
+          </select>
+        </div>
+
+        <div class="option-group">
+          <label>Text colour</label>
+          <input type="color" id="opt-color" value="#ffffff">
+        </div>
+
+        <div class="option-group">
+          <label>Font size</label>
+          <input type="range" id="opt-size" min="12" max="64" value="22">
+        </div>
+
+        <div class="option-group">
+          <label>Opacity</label>
+          <input type="range" id="opt-opacity" min="20" max="100" value="92">
+        </div>
+
+        <div class="option-group" style="grid-column: span 2">
+          <label>Include in metadata stamp</label>
+          <div class="toggle-row">
+            <label class="toggle-item">
+              <input type="checkbox" id="opt-date" checked>
+              <span class="toggle-label">Date &amp; Time</span>
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" id="opt-loc" checked>
+              <span class="toggle-label">GPS location</span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="location-status">⊙ Location: not yet fetched</div>
+    </div>
+  </div>
+
+  <!-- ── Step 4: Result ── -->
+  <div class="step" id="step-result">
+    <div class="step-header">
+      <div class="step-num">4</div>
+      <div class="step-title">Stamped &amp; certified photo</div>
+    </div>
+    <div class="step-body">
+
+      <div id="status"></div>
+
+      <div id="result-container">
+        <canvas id="canvas-out"></canvas>
+        <div class="btn-row">
+          <button class="btn btn-success" onclick="downloadPhoto()">Download photo</button>
+          <button class="btn btn-secondary" onclick="restartFlow()">Start again</button>
+        </div>
+      </div>
+
+      <div id="apply-row">
+        <button class="btn btn-primary" id="btn-apply" onclick="applyWatermark()" disabled>Apply stamp &amp; certification</button>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<canvas id="canvas-work"></canvas>
+
+<footer>All processing is local — no image ever leaves your device.</footer>
+
+<script>
+// ─── State ─────────────────────────────────────────────────────────────
+let stream = null;
+let capturedImage = null;
+let gpsCoords = null;
+let selectedCategory = null;
+let mode = 'camera';
+
+const video       = document.getElementById('video');
+const placeholder = document.getElementById('video-placeholder');
+const canvasWork  = document.getElementById('canvas-work');
+const canvasOut   = document.getElementById('canvas-out');
+const ctx         = canvasWork.getContext('2d');
+const ctxOut      = canvasOut.getContext('2d');
+
+const CATEGORIES = {
+  address:  'Proof of Address',
+  identity: 'Proof of Identity',
+  income:   'Proof of Income',
+  other:    'Other Document',
+};
+
+// ─── Tab switching ─────────────────────────────────────────────────────
+function switchTab(tab) {
+  mode = tab;
+  document.getElementById('tab-camera').classList.toggle('active', tab === 'camera');
+  document.getElementById('tab-upload').classList.toggle('active', tab === 'upload');
+  document.getElementById('camera-btns').style.display      = tab === 'camera' ? 'flex' : 'none';
+  document.getElementById('upload-btns').style.display      = tab === 'upload' ? 'flex' : 'none';
+  document.getElementById('video-container').style.display  = tab === 'camera' ? 'block' : 'none';
+  if (tab !== 'camera') stopCamera();
+}
+
+// ─── Camera ────────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    placeholder.style.display = 'none';
+    document.getElementById('btn-snap').disabled = false;
+    document.getElementById('btn-start-cam').style.display = 'none';
+    document.getElementById('btn-stop-cam').style.display  = 'inline-block';
+    fetchLocation();
+    setStatus('Camera ready — frame the document and take a photo');
+  } catch(e) {
+    setStatus('Camera error: ' + e.message, 'err');
+  }
+}
+
+function stopCamera() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  video.srcObject = null;
+  placeholder.style.display = 'flex';
+  document.getElementById('btn-snap').disabled = true;
+  document.getElementById('btn-start-cam').style.display = 'inline-block';
+  document.getElementById('btn-stop-cam').style.display  = 'none';
+}
+
+function snapPhoto() {
+  canvasWork.width  = video.videoWidth;
+  canvasWork.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+  loadImageFromCanvas();
+  setStatus('Photo captured — complete classification then apply stamp');
+}
+
+// ─── Upload ────────────────────────────────────────────────────────────
+function handleUpload(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      canvasWork.width  = img.naturalWidth;
+      canvasWork.height = img.naturalHeight;
+      ctx.drawImage(img, 0, 0);
+      loadImageFromCanvas();
+      setStatus('Photo loaded — complete classification then apply stamp');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  fetchLocation();
+}
+
+function loadImageFromCanvas() {
+  const img = new Image();
+  img.onload = () => {
+    capturedImage = img;
+    document.getElementById('btn-apply').disabled = false;
+    ['step-classify','step-options','step-result'].forEach(id =>
+      document.getElementById(id).classList.add('active'));
+    document.getElementById('result-container').style.display = 'none';
+    document.getElementById('apply-row').style.display = 'block';
+  };
+  img.src = canvasWork.toDataURL('image/jpeg', 0.95);
+}
+
+// ─── Location ──────────────────────────────────────────────────────────
+function fetchLocation() {
+  const el = document.getElementById('location-status');
+  el.textContent = '⊙ Location: fetching…';
+  el.style.color = '';
+  if (!navigator.geolocation) {
+    el.textContent = '✕ Location: not supported by this browser';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      gpsCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
+      const latStr = Math.abs(gpsCoords.lat).toFixed(5) + (gpsCoords.lat >= 0 ? '°N' : '°S');
+      const lngStr = Math.abs(gpsCoords.lng).toFixed(5) + (gpsCoords.lng >= 0 ? '°E' : '°W');
+      el.textContent = `✓ Location acquired: ${latStr}, ${lngStr}  (±${Math.round(gpsCoords.acc)}m)`;
+      el.style.color = '#4a6741';
+    },
+    err => {
+      el.textContent = '✕ Location: ' + err.message;
+      el.style.color = 'rgba(155,58,30,0.8)';
+    },
+    { enableHighAccuracy: true, timeout: 15000 }
+  );
+}
+
+// ─── Category selection ────────────────────────────────────────────────
+function selectCategory(cat) {
+  selectedCategory = cat;
+  document.querySelectorAll('.doc-cat-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('cat-' + cat).classList.add('selected');
+  document.getElementById('other-label-row').style.display = cat === 'other' ? 'block' : 'none';
+  updatePreview();
+}
+
+// ─── Live preview of certification text ───────────────────────────────
+function updatePreview() {
+  const name     = v('cert-name');
+  const role     = v('cert-role');
+  const company  = v('cert-company');
+  const customer = v('cert-customer');
+  const notes    = v('cert-notes');
+
+  const catLabel = getCategoryLabel();
+  const by    = name   || '[your name]';
+  const roleP = [role, company].filter(Boolean).join(', ');
+  const asOf  = roleP ? `, ${roleP},` : ',';
+  const cust  = customer || '[customer name]';
+  const now   = new Date();
+  const dStr  = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  let html = `I, <strong>${by}</strong>${asOf} certify that this is a true and accurate copy of the original <strong>${catLabel}</strong> belonging to <strong>${cust}</strong>, which I personally inspected in the presence of the customer on <strong>${dStr}</strong>.`;
+  if (notes) html += ` ${escHtml(notes)}`;
+
+  document.getElementById('cert-preview').innerHTML = html;
+}
+
+function getCategoryLabel() {
+  if (!selectedCategory) return '[document type]';
+  if (selectedCategory === 'other') {
+    return v('other-label') || 'Other Document';
+  }
+  return CATEGORIES[selectedCategory];
+}
+
+function v(id) { return document.getElementById(id).value.trim(); }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── Build cert lines for canvas ──────────────────────────────────────
+function buildCertLines(now) {
+  const name     = v('cert-name');
+  const role     = v('cert-role');
+  const company  = v('cert-company');
+  const customer = v('cert-customer');
+  const notes    = v('cert-notes');
+  const catLabel = getCategoryLabel();
+
+  const dStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+  const tStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  const byParts = [name, role, company].filter(Boolean).join('  |  ');
+
+  const lines = [
+    { text: 'CERTIFIED TRUE COPY OF ORIGINAL DOCUMENT', style: 'header' },
+    { text: `Category: ${catLabel}`, style: 'key' },
+    { text: `Customer: ${customer || '—'}`, style: 'key' },
+    { text: `Certified by: ${byParts || '—'}`, style: 'key' },
+    { text: '', style: 'gap' },
+    { text: `I personally inspected the original document in the presence`, style: 'body' },
+    { text: `of the customer on ${dStr} at ${tStr}.`, style: 'body' },
+  ];
+
+  if (notes) {
+    lines.push({ text: '', style: 'gap' });
+    // word-wrap notes at ~70 chars
+    const words = notes.split(' ');
+    let cur = 'Note: ';
+    words.forEach(w => {
+      if ((cur + w).length > 70 && cur !== 'Note: ') {
+        lines.push({ text: cur.trimEnd(), style: 'note' });
+        cur = '      ' + w + ' ';
+      } else {
+        cur += w + ' ';
+      }
+    });
+    if (cur.trim()) lines.push({ text: cur.trimEnd(), style: 'note' });
+  }
+
+  return lines;
+}
+
+// ─── Apply watermark ───────────────────────────────────────────────────
+function applyWatermark() {
+  if (!capturedImage) return;
+
+  const includeDate = document.getElementById('opt-date').checked;
+  const includeLoc  = document.getElementById('opt-loc').checked;
+  const metaPos     = document.getElementById('opt-position').value;
+  const certPos     = document.getElementById('opt-cert-position').value;
+  const color       = document.getElementById('opt-color').value;
+  const size        = parseInt(document.getElementById('opt-size').value);
+  const opacity     = parseInt(document.getElementById('opt-opacity').value) / 100;
+
+  const W = capturedImage.naturalWidth;
+  const H = capturedImage.naturalHeight;
+  canvasOut.width  = W;
+  canvasOut.height = H;
+  ctxOut.drawImage(capturedImage, 0, 0);
+
+  const scale    = Math.max(W, H) / 1200;
+  const fontSize = Math.max(14, Math.round(size * scale));
+  const lineH    = Math.round(fontSize * 1.65);
+  const padX     = Math.round(fontSize * 0.85);
+  const padY     = Math.round(fontSize * 0.6);
+
+  const now = new Date();
+
+  ctxOut.save();
+
+  // ── 1. Metadata corner stamp ──────────────────────────────────────
+  const metaLines = [];
+  if (includeDate) {
+    metaLines.push(now.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }));
+    metaLines.push(now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+  }
+  if (includeLoc) {
+    if (gpsCoords) {
+      const la = Math.abs(gpsCoords.lat).toFixed(5) + (gpsCoords.lat >= 0 ? '° N' : '° S');
+      const ln = Math.abs(gpsCoords.lng).toFixed(5) + (gpsCoords.lng >= 0 ? '° E' : '° W');
+      metaLines.push(la + '  ' + ln);
+    } else {
+      metaLines.push('Location unavailable');
+    }
+  }
+
+  if (metaLines.length) {
+    ctxOut.font = `500 ${fontSize}px 'DM Mono', monospace`;
+    const mW = Math.max(...metaLines.map(l => ctxOut.measureText(l).width));
+    const mH = metaLines.length * lineH;
+    let mx, my;
+    switch(metaPos) {
+      case 'bottom-right': mx = W - padX - mW; my = H - padY - mH + fontSize; break;
+      case 'bottom-left':  mx = padX;           my = H - padY - mH + fontSize; break;
+      case 'top-right':    mx = W - padX - mW; my = padY + fontSize; break;
+      case 'top-left':     mx = padX;           my = padY + fontSize; break;
+    }
+    // backdrop
+    ctxOut.globalAlpha = opacity * 0.62;
+    ctxOut.fillStyle   = 'rgba(0,0,0,0.75)';
+    ctxOut.beginPath();
+    ctxOut.roundRect(mx - padX * 0.6, my - fontSize - padY * 0.5, mW + padX * 1.2, mH + padY, Math.round(fontSize * 0.22));
+    ctxOut.fill();
+    // text
+    ctxOut.globalAlpha = opacity;
+    ctxOut.fillStyle   = color;
+    ctxOut.shadowColor = 'rgba(0,0,0,0.9)';
+    ctxOut.shadowBlur  = Math.round(fontSize * 0.3);
+    metaLines.forEach((line, i) => ctxOut.fillText(line, mx, my + i * lineH));
+    ctxOut.shadowBlur  = 0;
+  }
+
+  // ── 2. Certification band ─────────────────────────────────────────
+  const certLines  = buildCertLines(now);
+  const cFontSize  = Math.max(11, Math.round(fontSize * 0.82));
+  const cLineH     = Math.round(cFontSize * 1.7);
+  const cPadX      = Math.round(cFontSize * 1.4);
+  const cPadY      = Math.round(cFontSize * 1.0);
+
+  // Count visible lines (skip gap rows)
+  const visibleLines = certLines.filter(l => l.style !== 'gap').length;
+  const gapLines     = certLines.filter(l => l.style === 'gap').length;
+  const certBlockH   = (certLines.length * cLineH) + cPadY * 2;
+
+  const bandY = certPos === 'bottom' ? H - certBlockH : 0;
+
+  // Dark band
+  ctxOut.globalAlpha = opacity * 0.88;
+  ctxOut.fillStyle   = 'rgba(8,7,5,0.9)';
+  ctxOut.fillRect(0, bandY, W, certBlockH);
+
+  // Amber rule
+  ctxOut.globalAlpha = 1;
+  ctxOut.fillStyle   = 'rgba(200,135,58,0.8)';
+  const ruleY = certPos === 'bottom' ? bandY : bandY + certBlockH - 3;
+  ctxOut.fillRect(0, ruleY, W, 3);
+
+  // Text
+  let ty = bandY + cPadY + cFontSize;
+  certLines.forEach(({ text, style }) => {
+    if (style === 'gap') { ty += cLineH * 0.45; return; }
+
+    if (style === 'header') {
+      ctxOut.font        = `700 ${Math.round(cFontSize * 1.05)}px 'DM Mono', monospace`;
+      ctxOut.fillStyle   = 'rgba(200,135,58,1)';
+      ctxOut.globalAlpha = 1;
+      // centre the header
+      const hw = ctxOut.measureText(text).width;
+      ctxOut.fillText(text, (W - hw) / 2, ty);
+    } else if (style === 'key') {
+      ctxOut.font        = `500 ${cFontSize}px 'DM Mono', monospace`;
+      ctxOut.fillStyle   = 'rgba(232,168,90,0.9)';
+      ctxOut.globalAlpha = opacity;
+      ctxOut.fillText(text, cPadX, ty);
+    } else {
+      ctxOut.font        = `400 ${cFontSize}px 'DM Mono', monospace`;
+      ctxOut.fillStyle   = color;
+      ctxOut.globalAlpha = opacity * 0.9;
+      ctxOut.fillText(text, cPadX, ty);
+    }
+    ty += cLineH;
+  });
+
+  ctxOut.restore();
+
+  document.getElementById('result-container').style.display = 'flex';
+  document.getElementById('apply-row').style.display = 'none';
+  setStatus('Stamp applied — ready to download', 'ok');
+}
+
+// ─── Download ──────────────────────────────────────────────────────────
+function downloadPhoto() {
+  const catSlug = (selectedCategory === 'other'
+    ? (v('other-label') || 'other')
+    : (selectedCategory || 'doc')).toLowerCase().replace(/\s+/g, '-');
+  const a = document.createElement('a');
+  a.href     = canvasOut.toDataURL('image/jpeg', 0.95);
+  a.download = `certified_${catSlug}_${new Date().toISOString().slice(0,10)}.jpg`;
+  a.click();
+}
+
+// ─── Utilities ─────────────────────────────────────────────────────────
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type === 'ok' ? 'status-ok' : type === 'err' ? 'status-err' : '';
+}
+
+function restartFlow() {
+  capturedImage = null;
+  selectedCategory = null;
+  document.querySelectorAll('.doc-cat-card').forEach(c => c.classList.remove('selected'));
+  ['cert-name','cert-role','cert-company','cert-customer','cert-notes','other-label']
+    .forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('cert-preview').innerHTML =
+    '<em>Fill in the fields above to see a preview of the certification text that will appear on the image.</em>';
+  document.getElementById('other-label-row').style.display = 'none';
+  document.getElementById('result-container').style.display = 'none';
+  document.getElementById('apply-row').style.display = 'block';
+  document.getElementById('btn-apply').disabled = true;
+  ['step-classify','step-options','step-result'].forEach(id =>
+    document.getElementById(id).classList.remove('active'));
+  setStatus('');
+  switchTab('camera');
+}
+
+// Polyfill roundRect for older browsers
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r) {
+    this.moveTo(x+r,y);
+    this.lineTo(x+w-r,y); this.arcTo(x+w,y,x+w,y+r,r);
+    this.lineTo(x+w,y+h-r); this.arcTo(x+w,y+h,x+w-r,y+h,r);
+    this.lineTo(x+r,y+h); this.arcTo(x,y+h,x,y+h-r,r);
+    this.lineTo(x,y+r); this.arcTo(x,y,x+r,y,r);
+    this.closePath(); return this;
+  };
+}
+</script>
+</body>
+</html>
